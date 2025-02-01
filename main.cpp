@@ -102,6 +102,7 @@ int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
     IMAGE_DOS_HEADER* dosHdr = (IMAGE_DOS_HEADER*) buff;
     IMAGE_NT_HEADERS* ntHdr = (IMAGE_NT_HEADERS*) (size_t(dosHdr)+dosHdr->e_lfanew);
     IMAGE_SECTION_HEADER* secHdr = (IMAGE_SECTION_HEADER*)(size_t(ntHdr) + sizeof(*ntHdr));
+
     if(dosHdr->e_magic != IMAGE_DOS_SIGNATURE || ntHdr->Signature != IMAGE_NT_SIGNATURE){
         puts("[-] file may be broken");
         return 1;
@@ -145,7 +146,6 @@ int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
     newSectHdr2->PointerToRawData = lastSectHdr->PointerToRawData + lastSectHdr->SizeOfRawData;
     newNtHdr->FileHeader.NumberOfSections += 1;
 
-    //Pointer is  the shift from base image address !!!!!!!!!eror
     memcpy(outfile + newSectHdr2->PointerToRawData, code, sizeof(code));
 
     puts("[+] repair virtual size");
@@ -176,10 +176,6 @@ int injectInPadding(char *buff, DWORD fileSize,char *outfile, char *fileName, in
     IMAGE_DOS_HEADER* dsHdr = (IMAGE_DOS_HEADER*)buff;
     IMAGE_NT_HEADERS* ntHdr = (IMAGE_NT_HEADERS*)(size_t(dsHdr) + dsHdr->e_lfanew);
     IMAGE_SECTION_HEADER* secHdr = (IMAGE_SECTION_HEADER*)(size_t(ntHdr) + sizeof(*ntHdr));
-    //применяется при выравнивании сырой программы
-    auto fileAllign = ntHdr->OptionalHeader.FileAlignment;
-    //применяется при выравнивании в памяти
-    auto sectAllign = ntHdr->OptionalHeader.SectionAlignment;
 
     if(dsHdr->e_magic != IMAGE_DOS_SIGNATURE || ntHdr->Signature != IMAGE_NT_SIGNATURE){
         puts("[!] file may be broken!");
@@ -201,15 +197,15 @@ int injectInPadding(char *buff, DWORD fileSize,char *outfile, char *fileName, in
     findPEInfo(ntHdr, secHdr, ptrToPad, outfile, peInfo);
     
     printf("[+] check if there is enough place for shellcode \n");
-    int endOffset = 0;
-    int startOffset = 0;
+//    int endOffset = 0;
+//    int startOffset = 0;
 
-    // !!!!
+
     if(!(peInfo[number].Size > 0)){
         printf("[-] cant't inject in section %i", number+1);
         return 1;
     }
-// !! ПРОВРИТЬ разрешение на исполнение в секции в которой заинжектился shellcode
+
     int shell_start_offset = peInfo[number].StartOffset;
     int shell_end_offset = shell_start_offset + sizeof(code);
     ptrToPad = outfile + shell_start_offset;
@@ -292,27 +288,5 @@ int main(int argc, char** argv)
         }
 
     }
-
-//    if (argc != 3) {
-//        puts("[!] usage ./PePathcer.exe [path/to/file] [-p/-n]\n");
-//        puts("[info] -p -> inject payload in padding, -n -> create new section with payload");
-//        return 1;
-
-//    }
-
-
-//    if(!readBinFile(argv[1], &buff, fileSize)){
-//        puts("[-] can't open file");
-//        return 1;
-//    }
-
-//    char* word = argv[2]+1;
-//    if (*word == 'n'){
-//        createNewSect(buff, fileSize, injected, argv[1]);
-//    }
-
-//    if (*word == 'p'){
-//        injectInPadding(buff, fileSize, injected, argv[1]);
-//    }
     return 0;
 }
