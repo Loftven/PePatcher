@@ -3,7 +3,6 @@
 PePatcher is a simple open source program to patch PE file with shellcode.
 Installation
 ---
-You can download the latest compiled exe by cliking [here](https://github.com/Loftven/PePatcher "Download compiled file").
 Usage
 ---
 To get a list of basic options use:
